@@ -1,101 +1,177 @@
-import Image from "next/image";
+'use client';
+
+import { useState, useEffect } from 'react';
+import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { Moon, Sun } from 'lucide-react';
+import clsx from 'clsx';
+
+interface Ticket {
+  id: number;
+  data: string;
+  titulo: string;
+  categoria: string;
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [data, setData] = useState<Ticket[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const fetchData = async () => {
+    try {
+      const fakeData: Ticket[] = [
+        { id: 1, data: '2024-07-26', titulo: 'Erro de login', categoria: 'Autenticação' },
+        { id: 2, data: '2024-07-25', titulo: 'Página não encontrada', categoria: 'Navegação' },
+        { id: 3, data: '2024-07-24', titulo: 'Lentidão no carregamento', categoria: 'Performance' },
+        { id: 4, data: '2024-07-23', titulo: 'Bug no formulário', categoria: 'Formulário' },
+        { id: 5, data: '2024-07-22', titulo: 'Falha no pagamento', categoria: 'Pagamento' },
+        { id: 6, data: '2024-07-21', titulo: 'Problema de conexão', categoria: 'Rede' },
+        { id: 7, data: '2024-07-27', titulo: 'Erro de login 2', categoria: 'Autenticação' },
+        { id: 8, data: '2024-07-28', titulo: 'Página não encontrada 2', categoria: 'Navegação' },
+      ];
+      setData(fakeData);
+      setError(null);
+    } catch (err) {
+      console.error("Erro ao buscar dados:", err);
+      setError("Erro ao sincronizar dados. Tente novamente mais tarde.");
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const categoriasSomadas = data.reduce((acumulador, ticket) => {
+    const categoria = ticket.categoria;
+    if (!acumulador[categoria]) {
+      acumulador[categoria] = 0;
+    }
+    acumulador[categoria]++;
+    return acumulador;
+  }, {});
+
+  const dataParaGrafico = Object.entries(categoriasSomadas).map(([categoria, soma]) => ({
+    categoria,
+    soma,
+  }));
+
+  return (
+    <div className={clsx(
+      'min-h-screen flex flex-col p-6 transition-all duration-300',
+      darkMode && 'dark bg-gray-900 text-white',
+      !darkMode && 'bg-gray-100 text-gray-900'
+    )}>
+      <div className="flex justify-between items-start w-full">
+        <h1 className="text-2xl font-bold mb-4">Report Ticket System</h1>
+        <label htmlFor="check" className="cursor-pointer relative w-16 h-8 flex items-center" aria-label="Alternar tema">
+          <input
+            type="checkbox"
+            id="check"
+            className="sr-only peer"
+            checked={darkMode}
+            onChange={() => setDarkMode(!darkMode)}
+          />
+          <div className="w-full h-full bg-gray-300 rounded-full peer-checked:bg-gray-800 transition-all duration-400"></div>
+          <span className="absolute left-1 top-1 w-6 h-6 bg-white rounded-full peer-checked:left-9 transition-all duration-400 flex items-center justify-center">
+            {darkMode ? <Moon className="w-4 h-4 text-gray-800" /> : <Sun className="w-4 h-4 text-yellow-400" />}
+          </span>
+        </label>
+      </div>
+
+      <div className="flex flex-col items-center justify-center w-full">
+        <div className="flex gap-4 items-center">
+          <button onClick={fetchData} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
+            Sincronizar Dados
+          </button>
+
+          <button
+            onClick={() => data.length > 0 && setIsModalOpen(true)}
+            className={clsx(
+              'px-4 py-2 rounded-lg',
+              data.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-400 text-gray-700 cursor-not-allowed'
+            )}
+            disabled={data.length === 0}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            Gerar Gráfico
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        {error && (
+          <div className="text-red-500 mt-4">
+            {error}
+          </div>
+        )}
+
+        <div className={clsx(
+          darkMode ? 'dark bg-gray-800 text-white' : 'bg-white text-gray-900',
+          'mt-6 w-full max-w-md p-4 rounded-lg shadow'
+        )}>
+          <h2 className="text-lg font-semibold mb-3">Lista de Tickets</h2>
+          {data.length > 0 ? (
+            <ul role="list" className="divide-y divide-gray-300 dark:divide-gray-600">
+              {data.map((item) => (
+                <li key={item.id} className="flex py-4 first:pt-0 last:pb-0">
+                  <div className="ml-3 overflow-hidden">
+                    <p className="text-sm font-medium">{item.titulo}</p>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {item.categoria} - {item.data}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-500 dark:text-gray-400">Nenhum dado disponível.</p>
+          )}
+        </div>
+
+        {isModalOpen && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+            <div className={clsx(
+              darkMode ? 'dark bg-gray-800 text-white' : 'bg-white text-gray-900',
+              'p-6 rounded-lg shadow-lg max-w-lg w-full'
+            )}>
+              <h2 className="text-xl font-bold mb-4">Gráfico de Tickets</h2>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={dataParaGrafico}
+                    dataKey="soma"
+                    nameKey="categoria"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    label
+                  >
+                    <Tooltip content={<CustomTooltip />} />
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="mt-4 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    return (
+      <div className="bg-white p-2 rounded-md shadow-md">
+        <p className="label">{payload[0].payload.categoria}</p>
+        <p className="intro">{payload[0].payload.soma} tickets</p>
+      </div>
+    );
+  }
+
+  return null;
+};
