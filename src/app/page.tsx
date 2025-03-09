@@ -7,7 +7,7 @@ import clsx from 'clsx';
 
 interface Ticket {
   id: number;
-  data: string;
+  data: Date;
   titulo: string;
   categoria: string;
 }
@@ -21,14 +21,14 @@ export default function Home() {
   const fetchData = async () => {
     try {
       const fakeData: Ticket[] = [
-        { id: 1, data: '2024-07-26', titulo: 'Erro de login', categoria: 'Autenticação' },
-        { id: 2, data: '2024-07-25', titulo: 'Página não encontrada', categoria: 'Navegação' },
-        { id: 3, data: '2024-07-24', titulo: 'Lentidão no carregamento', categoria: 'Performance' },
-        { id: 4, data: '2024-07-23', titulo: 'Bug no formulário', categoria: 'Formulário' },
-        { id: 5, data: '2024-07-22', titulo: 'Falha no pagamento', categoria: 'Pagamento' },
-        { id: 6, data: '2024-07-21', titulo: 'Problema de conexão', categoria: 'Rede' },
-        { id: 7, data: '2024-07-27', titulo: 'Erro de login 2', categoria: 'Autenticação' },
-        { id: 8, data: '2024-07-28', titulo: 'Página não encontrada 2', categoria: 'Navegação' },
+        { id: 1, data: new Date('2024-07-26'), titulo: 'Erro de login', categoria: 'Autenticação' },
+        { id: 2, data: new Date('2024-07-25'), titulo: 'Página não encontrada', categoria: 'Navegação' },
+        { id: 3, data: new Date('2024-07-24'), titulo: 'Lentidão no carregamento', categoria: 'Performance' },
+        { id: 4, data: new Date('2024-07-23'), titulo: 'Bug no formulário', categoria: 'Formulário' },
+        { id: 5, data: new Date('2024-07-22'), titulo: 'Falha no pagamento', categoria: 'Pagamento' },
+        { id: 6, data: new Date('2024-07-21'), titulo: 'Problema de conexão', categoria: 'Rede' },
+        { id: 7, data: new Date('2024-07-27'), titulo: 'Erro de login 2', categoria: 'Autenticação' },
+        { id: 8, data: new Date('2024-07-28'), titulo: 'Página não encontrada 2', categoria: 'Navegação' },
       ];
       setData(fakeData);
       setError(null);
@@ -42,7 +42,7 @@ export default function Home() {
     fetchData();
   }, []);
 
-  const categoriasSomadas = data.reduce((acumulador, ticket) => {
+  const categoriasSomadas = data.reduce<Record<string,number>>((acumulador, ticket) => {
     const categoria = ticket.categoria;
     if (!acumulador[categoria]) {
       acumulador[categoria] = 0;
@@ -55,6 +55,8 @@ export default function Home() {
     categoria,
     soma,
   }));
+
+  const dateFormatter = new Intl.DateTimeFormat('pt-BR', {dateStyle: 'short'})
 
   return (
     <div className={clsx(
@@ -115,7 +117,7 @@ export default function Home() {
                   <div className="ml-3 overflow-hidden">
                     <p className="text-sm font-medium">{item.titulo}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {item.categoria} - {item.data}
+                      {item.categoria} - {dateFormatter.format(item.data)}
                     </p>
                   </div>
                 </li>
@@ -145,7 +147,7 @@ export default function Home() {
                     fill="#8884d8"
                     label
                   >
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip/>
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
@@ -163,7 +165,16 @@ export default function Home() {
   );
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+type CustomTooltipProps = {
+  active: boolean
+  payload: {
+    categoria: string
+    soma: number
+  }
+  label: string
+}
+/*
+const CustomTooltip = ({ active, payload, label }:CustomTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white p-2 rounded-md shadow-md">
@@ -175,3 +186,4 @@ const CustomTooltip = ({ active, payload, label }) => {
 
   return null;
 };
+*/
