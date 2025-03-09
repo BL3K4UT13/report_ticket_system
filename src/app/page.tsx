@@ -2,17 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend } from 'recharts';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, Ticket } from 'lucide-react';
 import clsx from 'clsx';
 
 interface Ticket {
   id: number;
   data: Date;
-  titulo: string;
   categoria: string;
+  subcategoria: string;
 }
 
 export default function Home() {
+  const apiURL = 'http://localhost:5179/api/';
   const [data, setData] = useState<Ticket[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(true);
@@ -20,22 +21,38 @@ export default function Home() {
 
   const fetchData = async () => {
     try {
-      const fakeData: Ticket[] = [
-        { id: 1, data: new Date('2024-07-26'), titulo: 'Erro de login', categoria: 'Autenticação' },
-        { id: 2, data: new Date('2024-07-25'), titulo: 'Página não encontrada', categoria: 'Navegação' },
-        { id: 3, data: new Date('2024-07-24'), titulo: 'Lentidão no carregamento', categoria: 'Performance' },
-        { id: 4, data: new Date('2024-07-23'), titulo: 'Bug no formulário', categoria: 'Formulário' },
-        { id: 5, data: new Date('2024-07-22'), titulo: 'Falha no pagamento', categoria: 'Pagamento' },
-        { id: 6, data: new Date('2024-07-21'), titulo: 'Problema de conexão', categoria: 'Rede' },
-        { id: 7, data: new Date('2024-07-27'), titulo: 'Erro de login 2', categoria: 'Autenticação' },
-        { id: 8, data: new Date('2024-07-28'), titulo: 'Página não encontrada 2', categoria: 'Navegação' },
-      ];
-      setData(fakeData);
+      const response = await fetch(`${apiURL}tickets`);
+      if (!response.ok) {
+          throw new Error('Erro ao buscar dados');
+      }
+      const data = await response.json();
+      data.forEach((x : Ticket) => {
+        x.data = new Date(x.data); 
+      });
+      setData(data);
       setError(null);
-    } catch (err) {
+  } catch (err) {
       console.error("Erro ao buscar dados:", err);
       setError("Erro ao sincronizar dados. Tente novamente mais tarde.");
-    }
+  }
+
+    // try {
+    //   const fakeData: Ticket[] = [
+    //     { id: 1, data: new Date('2024-07-26'), categoria: 'Autenticação', subcategoria: 'Erro de login' },
+    //     { id: 2, data: new Date('2024-07-25'), categoria: 'Navegação', subcategoria: 'Página não encontrada' },
+    //     { id: 3, data: new Date('2024-07-24'), categoria: 'Performance', subcategoria: 'Lentidão no carregamento' },
+    //     { id: 4, data: new Date('2024-07-23'), categoria: 'Formulário', subcategoria: 'Bug no formulário', },
+    //     { id: 5, data: new Date('2024-07-22'), categoria: 'Pagamento', subcategoria: 'Falha no pagamento', },
+    //     { id: 6, data: new Date('2024-07-21'), categoria: 'Rede', subcategoria: 'Problema de conexão', },
+    //     { id: 7, data: new Date('2024-07-27'), categoria: 'Autenticação', subcategoria: 'Erro de login', },
+    //     { id: 8, data: new Date('2024-07-28'), categoria: 'Navegação', subcategoria: 'Página não encontrada' },
+    //   ];
+    //   setData(fakeData);
+    //   setError(null);
+    // } catch (err) {
+    //   console.error("Erro ao buscar dados:", err);
+    //   setError("Erro ao sincronizar dados. Tente novamente mais tarde.");
+    // }
   };
 
   useEffect(() => {
@@ -115,7 +132,7 @@ export default function Home() {
               {data.map((item) => (
                 <li key={item.id} className="flex py-4 first:pt-0 last:pb-0">
                   <div className="ml-3 overflow-hidden">
-                    <p className="text-sm font-medium">{item.titulo}</p>
+                    <p className="text-sm font-medium">{item.subcategoria}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
                       {item.categoria} - {dateFormatter.format(item.data)}
                     </p>
