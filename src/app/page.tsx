@@ -7,14 +7,12 @@ import {
     ResponsiveContainer,
     Tooltip,
     PieProps,
-    Sector,
-    Label,
     BarChart,
     Bar,
     XAxis,
     YAxis,
     CartesianGrid,
-    // Legend, // Removido o import da Legend
+    Cell, // Importe o componente Cell
 } from 'recharts';
 import { Moon, Sun, Ticket } from 'lucide-react';
 import clsx from 'clsx';
@@ -47,7 +45,6 @@ interface CustomTooltipProps {
 }
 
 const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, total }) => {
-    console.log("Payload:", payload);
     if (active && payload && payload.length > 0 && typeof total === 'number') {
         const data = payload[0].payload;
         const percentage = ((data.soma / total) * 100).toFixed(2);
@@ -60,7 +57,6 @@ const CustomTooltip: React.FC<CustomTooltipProps> = ({ active, payload, total })
             </div>
         );
     }
-
     return null;
 };
 
@@ -105,6 +101,8 @@ const CustomPieLabel: React.FC<CustomPieLabelProps> = ({
     );
 };
 
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7300', '#a4add3', '#d18975', '#6a5acd', '#40e0d0', '#ffa07a', '#98fb98']; // Array de cores
+
 export default function Home() {
     const apiURL = 'http://localhost:5179/api/';
     const [data, setData] = useState<Ticket[]>([]);
@@ -112,13 +110,11 @@ export default function Home() {
     const [darkMode, setDarkMode] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [chartDataType, setChartDataType] = useState<'categoria' | 'subcategoria'>('categoria');
-    const chartOptions = [
-        { value: 'categoria', label: 'Categoria' },
-        { value: 'subcategoria', label: 'Subcategoria' },
-    ];
     const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState<string | null>(null);
     const [chartType, setChartType] = useState<'pizza' | 'bar'>('pizza');
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+    const [startDate, setStartDate] = useState<string>('');
+    const [endDate, setEndDate] = useState<string>('');
 
     const fetchData = async () => {
         try {
@@ -140,13 +136,25 @@ export default function Home() {
     };
 
     useEffect(() => {
-        fetchData().then(() => {
-            const uniqueCategories = [...new Set(data.map(ticket => ticket.categoria))];
-            setAvailableCategories(uniqueCategories);
-        });
+        fetchData();
+    }, []);
+    
+    useEffect(() => {
+        const uniqueCategories = [...new Set(data.map(ticket => ticket.categoria))];
+        setAvailableCategories(uniqueCategories);
     }, [data]);
 
-    const aggregatedData = data.reduce<Record<string, number>>((acumulador, ticket) => {
+    const filteredData = data.filter(ticket => {
+        const ticketDate = ticket.data.getTime();
+        const start = startDate ? new Date(startDate).getTime() : null;
+        const end = endDate ? new Date(endDate).getTime() : null;
+
+        if (start && ticketDate < start) return false;
+        if (end && ticketDate > end) return false;
+        return true;
+    });
+
+    const aggregatedData = filteredData.reduce<Record<string, number>>((acumulador, ticket) => {
         let type: string;
         if (selectedCategoryDropdown) {
             if (ticket.categoria === selectedCategoryDropdown) {
@@ -198,6 +206,17 @@ export default function Home() {
                         {darkMode ? <Moon className="w-4 h-4 text-gray-800" /> : <Sun className="w-4 h-4 text-yellow-400" />}
                     </span>
                 </label>
+            </div>
+
+            <div className="flex gap-4 items-center mb-4">
+                <div className="flex flex-col">
+                    <label htmlFor="startDate" className="text-sm mb-1">Data Inicial:</label>
+                    <input type="date" id="startDate" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="rounded p-1 text-black" />
+                </div>
+                <div className="flex flex-col">
+                    <label htmlFor="endDate" className="text-sm mb-1">Data Final:</label>
+                    <input type="date" id="endDate" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="rounded p-1 text-black" />
+                </div>
             </div>
 
             <div className="flex flex-col items-center justify-center w-full">
@@ -308,12 +327,15 @@ export default function Home() {
                                             cx="50%"
                                             cy="50%"
                                             outerRadius={80}
-                                            fill="#8884d8"
                                             label
                                         >
-                                            { }
+                                            {
+                                                dataParaGrafico.filter(item => !selectedCategoryDropdown || item.name === selectedCategoryDropdown).map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))
+                                            }
                                         </Pie>
-                                        {selectedCategoryDropdown && ( //Subcategoria
+                                        {selectedCategoryDropdown && (
                                             <Pie
                                                 data={dataParaGrafico.filter(item => data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name))}
                                                 dataKey="soma"
@@ -322,34 +344,53 @@ export default function Home() {
                                                 cy="50%"
                                                 innerRadius={50}
                                                 outerRadius={80}
-                                                fill="#8884d8"
+                                                label
                                             >
-                                                { }
+                                                {
+                                                    dataParaGrafico.filter(item => data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name)).map((entry, index) => (
+                                                        <Cell key={`cell-sub-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                    ))
+                                                }
                                             </Pie>
                                         )}
-                                        <Tooltip content={<CustomTooltip total={totalSoma} />} /> { }
+                                        <Tooltip content={<CustomTooltip total={totalSoma} />} />
                                     </PieChart>
                                 )}
 
                                 {chartType === 'bar' && (
-                                    <BarChart data={dataParaGrafico.filter(item => !selectedCategoryDropdown || item.name === selectedCategoryDropdown || data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name))}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="name" />
-                                        <YAxis />
-                                        <Tooltip />
-                                        {/* <Legend /> */}
-                                        <Bar dataKey="soma" fill="#8884d8" />
-                                    </BarChart>
+                                    <BarChart
+                                    data={dataParaGrafico.filter(item =>
+                                      !selectedCategoryDropdown ||
+                                      item.name === selectedCategoryDropdown ||
+                                      data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name)
+                                    )}
+                                  >
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="name" />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Bar dataKey="soma">
+                                      {dataParaGrafico
+                                        .filter(item =>
+                                          !selectedCategoryDropdown ||
+                                          item.name === selectedCategoryDropdown ||
+                                          data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name)
+                                        )
+                                        .map((entry, index) => (
+                                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Bar>
+                                  </BarChart>
                                 )}
                             </ResponsiveContainer>
 
-                            {/* Labels customizados abaixo do gráfico */}
+                            {/* Labels abaixo do gráfico */}
                             <div className="flex flex-wrap justify-center mt-4">
-                                {dataParaGrafico.filter(item => !selectedCategoryDropdown || item.name === selectedCategoryDropdown || data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name)).map(item => (
+                                {dataParaGrafico.filter(item => !selectedCategoryDropdown || item.name === selectedCategoryDropdown || data.some(t => t.categoria === selectedCategoryDropdown && t.subcategoria === item.name)).map((item, index) => (
                                     <div key={item.name} className="flex items-center mr-4 mb-2">
                                         <div
                                             className="w-4 h-4 rounded-full mr-2"
-                                            style={{ backgroundColor: '#8884d8' }}
+                                            style={{ backgroundColor: COLORS[index % COLORS.length] }}
                                         ></div>
                                         <span>
                                             {chartType === 'pizza'
