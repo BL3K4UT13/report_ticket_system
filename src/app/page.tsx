@@ -16,6 +16,7 @@ import {
 } from 'recharts';
 import { Moon, Sun, Ticket, Copy } from 'lucide-react';
 import clsx from 'clsx';
+import html2canvas from 'html2canvas';
 
 interface Ticket {
     id: number;
@@ -108,20 +109,20 @@ export default function Home() {
     const apiURL = 'http://localhost:5179/api/';
     const [data, setData] = useState<Ticket[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    // NOVO: Estado para o modal de exportação
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [chartDataType, setChartDataType] = useState<'categoria' | 'subcategoria'>('categoria');
     const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState<string | null>(null);
     const [chartType, setChartType] = useState<'pizza' | 'bar' | 'raw'>('pizza');
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [startDate, setStartDate] = useState<string>('');
     const [endDate, setEndDate] = useState<string>('');
     const rawDataRef = useRef<HTMLDivElement>(null);
+    const chartContainerRef = useRef<HTMLDivElement>(null);
     const [copyFeedback, setCopyFeedback] = useState('');
-    // NOVO: Estado para a seleção do tipo de gráfico a exportar
-    const [chartTypeToExport, setChartTypeToExport] = useState<'pizza' | 'bar' | 'raw' | 'all'>('all'); // 'all' para exportar tudo
+    // Removido chartTypeToExport, agora usaremos diretamente chartType para a exportação de imagem
+    const [googleExportFeedback, setGoogleExportFeedback] = useState('');
+    const [googlePresentationUrl, setGooglePresentationUrl] = useState<string | null>(null); // NOVO: Para armazenar o link da apresentação
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -215,63 +216,112 @@ export default function Home() {
         }
     };
 
-    // MODIFICADO: handleExport agora abre o modal de exportação
-    const handleExport = () => {
+    const handleOpenExportModal = () => {
         setIsExportModalOpen(true);
+        setGoogleExportFeedback(''); // Limpa feedback anterior
+        setGooglePresentationUrl(null); // Limpa o link da apresentação anterior
     };
 
-    // NOVA FUNÇÃO: handleConfirmExport para gerar o arquivo
-    const handleConfirmExport = () => {
-        let exportData = "Relatório de Tickets\n";
-        exportData += "Data de Geração: " + new Date().toLocaleDateString('pt-BR') + "\n";
-        exportData += "Período: " + (startDate || 'Início') + " a " + (endDate || 'Fim') + "\n";
-        exportData += "Categoria Filtrada: " + (selectedCategoryDropdown || 'Todas as Categorias') + "\n\n";
+    //exportar o gráfico/dados para o Google Slides
+    const handleExportToGoogleSlides = async () => {
+        setGoogleExportFeedback('Preparando para exportar para o Google Slides...');
+        setGooglePresentationUrl(null); // Limpa o link anterior
+        setIsExportModalOpen(false); // Fecha o modal de seleção
 
-        if (chartTypeToExport === 'all' || chartTypeToExport === 'raw') {
-            exportData += "--- Dados Brutos ---\n";
-            if (Object.keys(aggregatedBySubcategory).length > 0) {
-                Object.entries(aggregatedBySubcategory).forEach(([category, subcategories]) => {
-                    if (selectedCategoryDropdown && category !== selectedCategoryDropdown) {
-                        return;
-                    }
-                    const totalCategoryCount = Object.values(subcategories).reduce((sum, count) => sum + count, 0);
-                    exportData += `${category}: ${totalCategoryCount}\n`;
-                    Object.entries(subcategories).forEach(([sub, count]) => {
-                        const percentage = totalCategoryCount > 0 ? ((count / totalCategoryCount) * 100).toFixed(2) : '0.00';
-                        exportData += `  - ${sub}: ${count} (${percentage}%)\n`;
-                    });
-                });
-            } else {
-                exportData += "Nenhum dado bruto disponível para os filtros selecionados.\n";
-            }
-            exportData += "\n";
+        let imageBase64 = null;
+        let exportTitle = "";
+        let elementToCapture = null;
+
+        // Decide qual elemento capturar com base no 'chartType' atual do modal principal
+        if (chartType !== 'raw' && chartContainerRef.current) {
+            // Captura o container do gráfico se for pizza ou barra
+            elementToCapture = chartContainerRef.current.querySelector('.recharts-wrapper') || chartContainerRef.current;
+            exportTitle = selectedCategoryDropdown
+                ? `Gráfico de ${selectedCategoryDropdown} (${chartType === 'pizza' ? 'Pizza' : 'Barras'})`
+                : `Gráfico Geral de Categorias (${chartType === 'pizza' ? 'Pizza' : 'Barras'})`;
+        } else if (chartType === 'raw' && rawDataRef.current) {
+            // Captura o container de dados brutos
+            elementToCapture = rawDataRef.current;
+            exportTitle = selectedCategoryDropdown
+                ? `Dados Brutos de ${selectedCategoryDropdown}`
+                : "Dados Brutos Gerais";
+        } else {
+             setGoogleExportFeedback('Nenhum elemento de gráfico ou dados brutos para capturar.');
+             return;
         }
 
-        if (chartTypeToExport === 'all' || chartTypeToExport === 'pizza' || chartTypeToExport === 'bar') {
-            exportData += "--- Dados Agregados para Gráfico ---\n";
-            if (dataParaGrafico.length > 0) {
-                dataParaGrafico.forEach(item => {
-                    const percentage = totalSoma > 0 ? ((item.soma / totalSoma) * 100).toFixed(2) : '0.00';
-                    exportData += `${item.name}: ${item.soma} (${percentage}%)\n`;
-                });
-            } else {
-                exportData += "Nenhum dado agregado disponível para os filtros selecionados.\n";
-            }
-            exportData += "\n";
+        if (!elementToCapture) {
+            setGoogleExportFeedback('Erro: Elemento para captura não encontrado.');
+            return;
         }
 
+        try {
+            const canvas = await html2canvas(elementToCapture, {
+                backgroundColor: darkMode ? '#1f2937' : '#ffffff',
+                useCORS: true,
+                scale: 2, 
+                logging: true, 
+            });
+            imageBase64 = canvas.toDataURL('image/png');
+        } catch (error) {
+            console.error("Erro ao capturar imagem:", error);
+            setGoogleExportFeedback('Erro ao capturar imagem para exportação.');
+            return;
+        }
 
-        const blob = new Blob([exportData], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = `relatorio_tickets_${chartTypeToExport}_${new Date().toISOString().split('T')[0]}.txt`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
+        if (!imageBase64) {
+            setGoogleExportFeedback('Não foi possível gerar a imagem para exportação.');
+            return;
+        }
 
-        setIsExportModalOpen(false); // Fecha o modal de exportação após concluir
+        try {
+            const response = await fetch('/api/export-to-google-slides', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    imageData: imageBase64,
+                    title: exportTitle,
+                    description: `Relatório de Tickets - Período: ${startDate || 'Início'} a ${endDate || 'Fim'}` +
+                                 `${selectedCategoryDropdown ? ` - Categoria: ${selectedCategoryDropdown}` : ''}`,
+                    startDate: startDate,
+                    endDate: endDate,
+                    category: selectedCategoryDropdown,
+                    chartType: chartType, // Envia o tipo de gráfico atual
+                }),
+            });
+
+            if (response.ok) {
+                const result = await response.json();
+                setGoogleExportFeedback('Exportado com sucesso!');
+                setGooglePresentationUrl(result.presentationUrl); // Armazena o link
+            } else {
+                const errorData = await response.json();
+                setGoogleExportFeedback(`Falha na exportação: ${errorData.message || 'Erro desconhecido.'}`);
+            }
+        } catch (error) {
+            console.error("Erro na comunicação com o backend:", error);
+            setGoogleExportFeedback('Erro de rede ou servidor ao exportar.');
+        } finally {
+            // O feedback e o link permanecem visíveis até que o usuário clique em "Fechar" no modal principal
+            // ou até que uma nova exportação seja iniciada.
+        }
+    };
+
+    const handleCopyPresentationLink = () => {
+        if (googlePresentationUrl) {
+            navigator.clipboard.writeText(googlePresentationUrl)
+                .then(() => {
+                    setGoogleExportFeedback('Link copiado!');
+                    // Opcional: reverter para a mensagem anterior após um tempo
+                    setTimeout(() => setGoogleExportFeedback('Exportado com sucesso!'), 2000);
+                })
+                .catch(err => {
+                    console.error('Erro ao copiar link:', err);
+                    setGoogleExportFeedback('Erro ao copiar link.');
+                });
+        }
     };
 
 
@@ -350,10 +400,10 @@ export default function Home() {
                 </div>
 
                 {isModalOpen && (
-                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-20"> {/* Aumentei o z-index */}
+                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-20">
                         <div className={clsx(
                             darkMode ? 'dark bg-gray-800 text-white' : 'bg-white text-gray-900',
-                            'p-6 rounded-lg shadow-lg max-w-4xl w-full'
+                            'p-6 rounded-lg shadow-lg max-w-5xl w-full'
                         )}>
                             <h2 className="text-xl font-bold mb-4">Gráfico de Tickets</h2>
 
@@ -439,7 +489,7 @@ export default function Home() {
                                 </select>
                             </div>
 
-                            <div className="flex flex-col md:flex-row gap-4 items-center md:items-start">
+                            <div ref={chartContainerRef} className="flex flex-col md:flex-row gap-4 items-center md:items-start">
                                 {chartType !== 'raw' && (
                                     <ResponsiveContainer width="100%" height={300} className="flex-grow">
                                         {chartType === 'pizza' && (
@@ -485,12 +535,12 @@ export default function Home() {
                                     <div
                                         ref={rawDataRef}
                                         className={clsx(
-                                            "flex-grow w-full h-[400px] p-4 border rounded-lg overflow-y-auto relative",
+                                            "flex-grow w-full h-[500px] p-4 border rounded-lg overflow-y-auto relative",
                                             darkMode ? "bg-gray-700 text-white border-gray-600" : "bg-gray-50 text-gray-800 border-gray-200"
                                         )}
                                     >
-                                        <div className="flex justify-between items-center mb-2 sticky top-0 bg-inherit z-10">
-                                            <h3 className="font-bold">Dados Brutos (Filtrados por Data e Categoria)</h3>
+                                        <div className="flex justify-between items-center mb-2 top-0 bg-inherit z-10">
+                                            <h3 className="font-bold">Dados Brutos</h3>
                                             <button
                                                 onClick={handleCopyRawData}
                                                 className="flex items-center gap-1 px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 text-sm"
@@ -550,7 +600,7 @@ export default function Home() {
 
                             <div className="flex justify-end mt-4 gap-2">
                                 <button
-                                    onClick={handleExport} // Agora abre o modal de exportação
+                                    onClick={handleOpenExportModal}
                                     className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 dark:bg-purple-700 dark:hover:bg-purple-600"
                                 >
                                     Exportar
@@ -566,68 +616,80 @@ export default function Home() {
                     </div>
                 )}
 
-                {/* NOVO MODAL: Modal de Configuração de Exportação */}
+                {/* Modal de Configuração de Exportação (APENAS PARA GOOGLE SLIDES) */}
                 {isExportModalOpen && (
-                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-30"> {/* Z-index maior para ficar por cima do modal principal */}
+                    <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-30">
                         <div className={clsx(
                             darkMode ? 'dark bg-gray-800 text-white' : 'bg-white text-gray-900',
                             'p-6 rounded-lg shadow-lg max-w-sm w-full'
                         )}>
-                            <h3 className="text-lg font-bold mb-4">Configurar Exportação</h3>
+                            <h3 className="text-lg font-bold mb-4">Exportar para Google Slides</h3>
 
-                            <div className="mb-4">
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Qual conteúdo você deseja exportar?
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                                Selecione qual conteúdo do relatório atual você deseja exportar como imagem para uma nova apresentação do Google Slides.
+                            </p>
+
+                            <div className="flex flex-col space-y-2 mb-4">
+                                <label className="inline-flex items-center">
+                                    <input
+                                        type="radio"
+                                        className="form-radio text-blue-600 dark:text-blue-400"
+                                        name="googleExportOption"
+                                        value="chart"
+                                        checked={chartType !== 'raw'} // Marcado se o gráfico (pizza/barra) estiver visível
+                                        onChange={() => setChartType(chartType === 'pizza' ? 'pizza' : 'bar')} 
+                                    />
+                                    <span className="ml-2">Gráfico (Pizza/Barras) Visível</span>
                                 </label>
-                                <div className="flex flex-col space-y-2">
-                                    <label className="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            className="form-radio text-blue-600 dark:text-blue-400"
-                                            name="exportOption"
-                                            value="all"
-                                            checked={chartTypeToExport === 'all'}
-                                            onChange={() => setChartTypeToExport('all')}
-                                        />
-                                        <span className="ml-2">Todos os dados (Gráficos e Brutos)</span>
-                                    </label>
-                                    <label className="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            className="form-radio text-blue-600 dark:text-blue-400"
-                                            name="exportOption"
-                                            value="pizza"
-                                            checked={chartTypeToExport === 'pizza'}
-                                            onChange={() => setChartTypeToExport('pizza')}
-                                        />
-                                        <span className="ml-2">Apenas dados de Gráfico (Pizza/Barras)</span>
-                                    </label>
-                                    <label className="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            className="form-radio text-blue-600 dark:text-blue-400"
-                                            name="exportOption"
-                                            value="raw"
-                                            checked={chartTypeToExport === 'raw'}
-                                            onChange={() => setChartTypeToExport('raw')}
-                                        />
-                                        <span className="ml-2">Apenas dados Brutos</span>
-                                    </label>
-                                </div>
+                                <label className="inline-flex items-center">
+                                    <input
+                                        type="radio"
+                                        className="form-radio text-blue-600 dark:text-blue-400"
+                                        name="googleExportOption"
+                                        value="raw"
+                                        checked={chartType === 'raw'} 
+                                        onChange={() => setChartType('raw')}
+                                    />
+                                    <span className="ml-2">Dados Brutos Visíveis</span>
+                                </label>
                             </div>
+
+                            {googleExportFeedback && (
+                                <p className="mt-4 text-sm text-center text-blue-500 dark:text-blue-400">{googleExportFeedback}</p>
+                            )}
+
+                            {googlePresentationUrl && (
+                                <div className="mt-4 p-3 bg-green-100 dark:bg-green-800 rounded-md flex flex-col items-center">
+                                    <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">Apresentação criada:</p>
+                                    <a
+                                        href={googlePresentationUrl}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-600 dark:text-blue-400 underline hover:text-blue-800 dark:hover:text-blue-300 break-all text-center"
+                                    >
+                                        Abrir Apresentação
+                                    </a>
+                                    <button
+                                        onClick={handleCopyPresentationLink}
+                                        className="mt-2 flex items-center gap-1 px-3 py-1 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500 text-sm"
+                                    >
+                                        <Copy className="w-4 h-4" /> Copiar Link
+                                    </button>
+                                </div>
+                            )}
 
                             <div className="flex justify-end gap-2 mt-6">
                                 <button
-                                    onClick={() => setIsExportModalOpen(false)} // Fecha o modal de exportação
+                                    onClick={() => setIsExportModalOpen(false)}
                                     className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500"
                                 >
                                     Cancelar
                                 </button>
                                 <button
-                                    onClick={handleConfirmExport} // Confirma e inicia a exportação
+                                    onClick={handleExportToGoogleSlides}
                                     className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
                                 >
-                                    Concluir
+                                    Concluir Exportação
                                 </button>
                             </div>
                         </div>
