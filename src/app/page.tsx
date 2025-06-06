@@ -112,7 +112,7 @@ export default function Home() {
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [darkMode, setDarkMode] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState<string | null>(null);
+    const [selectedCategoryDropdown, setSelectedCategoryDropdown] = useState<string>('');
     const [chartType, setChartType] = useState<'pizza' | 'bar' | 'raw'>('pizza');
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [startDate, setStartDate] = useState<string>('');
@@ -273,29 +273,27 @@ export default function Home() {
             setGoogleExportFeedback('Não foi possível gerar a imagem para exportação.');
             return;
         }
+        
+        const formData = new FormData();
+        formData.append('imageData', imageBase64);
+        formData.append('title', exportTitle);
+        formData.append('description', `Relatório de Tickets - Período: ${startDate || 'Início'} a ${endDate || 'Fim'}` + `${selectedCategoryDropdown ? ` - Categoria: ${selectedCategoryDropdown}` : ''}`);
+        formData.append('startDate', startDate);
+        formData.append('endDate', endDate);
+        formData.append('category', selectedCategoryDropdown);
+        formData.append('chartType', chartType);
 
         try {
-            const response = await fetch('/api/export-to-google-slides', {
+            const response = await fetch(`${apiURL}export-to-google-slides`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    imageData: imageBase64,
-                    title: exportTitle,
-                    description: `Relatório de Tickets - Período: ${startDate || 'Início'} a ${endDate || 'Fim'}` +
-                                 `${selectedCategoryDropdown ? ` - Categoria: ${selectedCategoryDropdown}` : ''}`,
-                    startDate: startDate,
-                    endDate: endDate,
-                    category: selectedCategoryDropdown,
-                    chartType: chartType, // Envia o tipo de gráfico atual
-                }),
+                body: formData
             });
 
             if (response.ok) {
                 const result = await response.json();
                 setGoogleExportFeedback('Exportado com sucesso!');
-                setGooglePresentationUrl(result.presentationUrl); // Armazena o link
+                window.open(result.presentationUrl, '_blank');
+                // setGooglePresentationUrl(result.presentationUrl); // Armazena o link
             } else {
                 const errorData = await response.json();
                 setGoogleExportFeedback(`Falha na exportação: ${errorData.message || 'Erro desconhecido.'}`);
@@ -314,7 +312,6 @@ export default function Home() {
             navigator.clipboard.writeText(googlePresentationUrl)
                 .then(() => {
                     setGoogleExportFeedback('Link copiado!');
-                    // Opcional: reverter para a mensagem anterior após um tempo
                     setTimeout(() => setGoogleExportFeedback('Exportado com sucesso!'), 2000);
                 })
                 .catch(err => {
@@ -350,10 +347,6 @@ export default function Home() {
 
             <div className="flex flex-col items-center justify-center w-full">
                 <div className="flex gap-4 items-center">
-                    <button onClick={() => fetchData()} className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">
-                        Sincronizar Dados
-                    </button>
-
                     <button
                         onClick={() => data.length > 0 && setIsModalOpen(true)}
                         className={clsx(
@@ -616,7 +609,7 @@ export default function Home() {
                     </div>
                 )}
 
-                {/* Modal de Configuração de Exportação (APENAS PARA GOOGLE SLIDES) */}
+                {/* Modal de Configuração de Exportação */}
                 {isExportModalOpen && (
                     <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-30">
                         <div className={clsx(
@@ -636,10 +629,10 @@ export default function Home() {
                                         className="form-radio text-blue-600 dark:text-blue-400"
                                         name="googleExportOption"
                                         value="chart"
-                                        checked={chartType !== 'raw'} // Marcado se o gráfico (pizza/barra) estiver visível
-                                        onChange={() => setChartType(chartType === 'pizza' ? 'pizza' : 'bar')} 
+                                        checked={chartType === 'pizza'}
+                                        onChange={() => setChartType('pizza')} 
                                     />
-                                    <span className="ml-2">Gráfico (Pizza/Barras) Visível</span>
+                                    <span className="ml-2">Gráfico Pizza</span>
                                 </label>
                                 <label className="inline-flex items-center">
                                     <input
@@ -647,10 +640,10 @@ export default function Home() {
                                         className="form-radio text-blue-600 dark:text-blue-400"
                                         name="googleExportOption"
                                         value="raw"
-                                        checked={chartType === 'raw'} 
-                                        onChange={() => setChartType('raw')}
+                                        checked={chartType === 'bar'} 
+                                        onChange={() => setChartType('bar')}
                                     />
-                                    <span className="ml-2">Dados Brutos Visíveis</span>
+                                    <span className="ml-2">Gráfico em Barras</span>
                                 </label>
                             </div>
 

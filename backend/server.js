@@ -1,11 +1,23 @@
-const express = require('express');
+/*const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const { google } = require('googleapis');
 const base64Img = require('base64-img');
 const fs = require('fs');
 const path = require('path');
+const formidable = require('formidable');*/
 
+import express from 'express'
+import pg from 'pg'
+import cors from 'cors'
+import { google } from 'googleapis'
+import base64Img from 'base64-img'
+import fs from 'fs'
+import path from 'path'
+import formidable from 'formidable';
+import { fileURLToPath } from 'url';
+
+const { Pool } = pg
 const app = express();
 const port = 5179;
 
@@ -24,8 +36,10 @@ const pool = new Pool({
 });
 
 // --- Configuração da Google API ---
-// Lembre-se: Para produção, é ALTAMENTE RECOMENDADO USAR VARIÁVEIS DE AMBIENTE para credenciais sensíveis.
-// Por favor, garanta que 'service-account-key.json' esteja no mesmo diretório que 'server.js'.
+
+const __filename = fileURLToPath(import.meta.url); 
+const __dirname = path.dirname(__filename);
+
 const KEYFILEPATH = path.join(__dirname, 'service-account-key.json');
 
 const SCOPES = [
@@ -50,12 +64,30 @@ app.get('/api/tickets', async (req, res) => {
 });
 
 app.post('/api/export-to-google-slides', async (req, res) => {
-    // Variável para armazenar o caminho temporário da imagem, para garantir a remoção em caso de erro
-    let tempImagePath = null;
+    const form = formidable({ multiples: true });
+    form.parse(req, async (err, fields, files) => {
+        // Variável para armazenar o caminho temporário da imagem, para garantir a remoção em caso de erro
+        let tempImagePath = null;
 
     try {
-        const { imageData, title, description, startDate, endDate, category, chartType } = req.body;
+        const imageData = Array.isArray(fields.imageData) ? fields.imageData[0] : fields.imageData;
+        const title = Array.isArray(fields.title) ? fields.title[0] : fields.title;
+        const description = Array.isArray(fields.description) ? fields.description[0] : fields.description;
+        const startDate = Array.isArray(fields.startDate) ? fields.startDate[0] : fields.startDate;
+        const endDate = Array.isArray(fields.endDate) ? fields.endDate[0] : fields.endDate;
+        const category = Array.isArray(fields.category) ? fields.category[0] : fields.category;
+        const chartType = Array.isArray(fields.chartType) ? fields.chartType[0] : fields.chartType;
 
+        console.log("Dados recebidos no backend (após tratamento):", {
+            imageData: imageData ? 'recebido' : 'vazio',
+            title, // Agora 'title' deve ser uma string simples
+            description,
+            startDate,
+            endDate,
+            category,
+            chartType
+        });
+        console.log(imageData)
         if (!imageData) {
             return res.status(400).json({ message: 'Dados da imagem são necessários.' });
         }
@@ -67,11 +99,13 @@ app.post('/api/export-to-google-slides', async (req, res) => {
         tempImagePath = base64Img.imgSync(imageData, path.join(__dirname, 'temp'), `chart_export_${Date.now()}`);
 
         const newPresentation = await slides.presentations.create({
-            requestBody: {
-                title: title || `Relatório de Tickets - ${new Date().toLocaleDateString('pt-BR')}`,
-            },
-        });
-        const presentationId = newPresentation.data.presentationId;
+                requestBody: {
+                    title: title || `Relatório de Tickets - ${new Date().toLocaleDateString('pt-BR')}`, 
+                },
+            });
+            const presentationId = newPresentation.data.presentationId;
+
+            await addAllowedUser(drive, presentationId,'arturblancop@gmail.com', 'writer');
 
         // upload da imagem para o Google Drive
         const imageFile = await drive.files.create({
@@ -89,8 +123,7 @@ app.post('/api/export-to-google-slides', async (req, res) => {
         const imageFileId = imageFile.data.id;
         const imageUrl = imageFile.data.webContentLink; // Este é o URL que a API de Slides precisa
 
-        // 4. Tornar a imagem acessível publicamente (leitura) no Google Drive
-        // ESSENCIAL para que a imagem seja exibida na apresentação do Slides
+        // Torna a imagem acessível publicamente (leitura) no Google Drive
         await drive.permissions.create({
             fileId: imageFileId,
             requestBody: {
@@ -99,26 +132,26 @@ app.post('/api/export-to-google-slides', async (req, res) => {
             },
         });
 
+        // ... dentro da sua rota /api/export-to-google-slides ...
+
         // Dimensões padrão do slide 16:9 em EMU
         const SLIDE_WIDTH_EMU = 9144000;
         const SLIDE_HEIGHT_EMU = 5143500;
-        // Aproximadamente 1 pixel = 12700 EMUs para o cálculo
+        // 1 pixel = 12700 EMUs
         const PX_TO_EMU = 12700;
 
-        // Você pode ajustar as dimensões da imagem aqui com base na sua captura no frontend
-        // Exemplo: se o html2canvas gera uma imagem de 1200x675px (proporção 16:9)
-        const IMAGE_CAPTURE_WIDTH_PX = 1200;
-        const IMAGE_CAPTURE_HEIGHT_PX = 675;
+        // ajustar dimensões da imagem
+        const IMAGE_CAPTURE_WIDTH_PX = 1200; // Ou o valor real da sua captura
+        const IMAGE_CAPTURE_HEIGHT_PX = 675; // Ou o valor real da sua captura
 
-        // Calcula as dimensões da imagem para caber no slide com uma margem
-        const targetImageWidthEmu = IMAGE_CAPTURE_WIDTH_PX * PX_TO_EMU * 0.75; // Usa 75% da largura da captura
-        const targetImageHeightEmu = IMAGE_CAPTURE_HEIGHT_PX * PX_TO_EMU * 0.75; // E 75% da altura
+        // calcula as dimensões da imagem para caber no slide com uma margem
+        const targetImageWidthEmu = IMAGE_CAPTURE_WIDTH_PX * PX_TO_EMU * 0.75;
+        const targetImageHeightEmu = IMAGE_CAPTURE_HEIGHT_PX * PX_TO_EMU * 0.75;
 
-        // Calcula a posição para centralizar a imagem
+        // calcula a posição para centralizar a imagem
         const imageTranslateX = (SLIDE_WIDTH_EMU - targetImageWidthEmu) / 2;
         const imageTranslateY = (SLIDE_HEIGHT_EMU - targetImageHeightEmu) / 2;
 
-        // 5. Adicionar um novo slide à apresentação e inserir a imagem e texto
         const requests = [
             {
                 createSlide: {
@@ -132,40 +165,33 @@ app.post('/api/export-to-google-slides', async (req, res) => {
             {
                 createImage: {
                     objectId: 'exportedImage',
-                    url: imageUrl, // Agora usando o webContentLink da imagem do Drive
+                    url: imageUrl,
                     elementProperties: {
                         pageObjectId: 'newSlide',
                         size: {
-                            width: { magnitude: targetImageWidthEmu, unit: 'EMU' },
-                            height: { magnitude: targetImageHeightEmu, unit: 'EMU' },
+                            width: { magnitude: targetImageWidthEmu * 0.8, unit: 'EMU' },
+                            height: { magnitude: targetImageHeightEmu * 0.8, unit: 'EMU' },
                         },
-                        transform: {
-                            translateX: { magnitude: imageTranslateX, unit: 'EMU' },
-                            translateY: { magnitude: imageTranslateY, unit: 'EMU' },
-                        },
+                        
                     },
                 },
             },
             {
-                // Cria caixa de texto para o Título (ajustado para ser mais acima)
+                // cria caixa de texto para o Título
                 createShape: {
                     objectId: 'titleTextBox',
                     shapeType: 'TEXT_BOX',
                     elementProperties: {
                         pageObjectId: 'newSlide',
                         size: {
-                            width: { magnitude: SLIDE_WIDTH_EMU * 0.9, unit: 'EMU' },
+                            width: { magnitude: SLIDE_WIDTH_EMU * 0.8, unit: 'EMU' },
                             height: { magnitude: 500000, unit: 'EMU' },
-                        },
-                        transform: {
-                            translateX: { magnitude: SLIDE_WIDTH_EMU * 0.05, unit: 'EMU' }, // 5% de margem esquerda
-                            translateY: { magnitude: SLIDE_HEIGHT_EMU * 0.05, unit: 'EMU' }, // 5% do topo
                         },
                     },
                 },
             },
             {
-                // Insere o texto do título
+                // insere o texto do título
                 insertText: {
                     objectId: 'titleTextBox',
                     insertionIndex: 0,
@@ -173,25 +199,21 @@ app.post('/api/export-to-google-slides', async (req, res) => {
                 },
             },
             {
-                // Cria caixa de texto para a Descrição/Metadados (ajustado para o rodapé)
+                // cria caixa de texto para a Descrição/Metadados
                 createShape: {
                     objectId: 'descriptionTextBox',
                     shapeType: 'TEXT_BOX',
                     elementProperties: {
                         pageObjectId: 'newSlide',
                         size: {
-                            width: { magnitude: SLIDE_WIDTH_EMU * 0.9, unit: 'EMU' },
+                            width: { magnitude: SLIDE_WIDTH_EMU * 0.8, unit: 'EMU' },
                             height: { magnitude: 500000, unit: 'EMU' },
-                        },
-                        transform: {
-                            translateX: { magnitude: SLIDE_WIDTH_EMU * 0.05, unit: 'EMU' },
-                            translateY: { magnitude: SLIDE_HEIGHT_EMU * 0.9, unit: 'EMU' }, // Posiciona próximo ao rodapé
                         },
                     },
                 },
             },
             {
-                // Insere o texto da descrição/metadados
+                // insere o texto da descrição/metadados
                 insertText: {
                     objectId: 'descriptionTextBox',
                     insertionIndex: 0,
@@ -199,12 +221,14 @@ app.post('/api/export-to-google-slides', async (req, res) => {
                 },
             },
             {
-                // Opcional: Exclui o slide padrão inicial para ter apenas o seu slide personalizado
+                // exclui o slide padrão inicial para ter apenas o seu slide personalizado
                 deleteObject: {
                     objectId: newPresentation.data.slides[0].objectId
                 }
             }
         ];
+
+        
 
         await slides.presentations.batchUpdate({
             presentationId: presentationId,
@@ -213,7 +237,7 @@ app.post('/api/export-to-google-slides', async (req, res) => {
             },
         });
 
-        // 6. Excluir a imagem temporária do servidor após o upload
+        // exclui a imagem temporária do servidor após o upload
         fs.unlinkSync(tempImagePath);
 
         res.status(200).json({
@@ -224,13 +248,40 @@ app.post('/api/export-to-google-slides', async (req, res) => {
 
     } catch (error) {
         console.error('Erro ao exportar para Google Slides:', error);
-        // Garante que o arquivo temporário seja removido mesmo em caso de erro
+        // garante que o arquivo temporário seja removido mesmo em caso de erro
         if (tempImagePath && fs.existsSync(tempImagePath)) {
             fs.unlinkSync(tempImagePath);
         }
         res.status(500).json({ message: 'Erro interno do servidor ao exportar.', error: error.message });
     }
+    });
+
 });
+
+// Assuming you have your Google Drive API client initialized as 'drive'
+// For example: const drive = google.drive({ version: 'v3', auth: authClient });
+
+async function addAllowedUser(drive,presentationId, userEmail, role) {
+    try {
+        const permission = await drive.permissions.create({
+            fileId: presentationId,
+            requestBody: {
+                type: 'user', // Can be 'user', 'group', 'domain', or 'anyone'
+                role: role,   // Can be 'reader', 'writer', 'commenter', 'owner'
+                emailAddress: userEmail,
+            },
+            // Optional: sendNotificationEmail to notify the user
+            sendNotificationEmail: true,
+            // Optional: emailMessage for the notification email
+            emailMessage: `You've been granted <span class="math-inline">\{role\} access to the presentation "</span>{newPresentation.data.title}".`,
+        });
+        console.log(`Permission added for ${userEmail} with role: ${role}`);
+        return permission.data;
+    } catch (error) {
+        console.error('Error adding permission:', error);
+        throw error;
+    }
+}
 
 // --- Inicialização do Servidor ---
 app.listen(port, () => {
